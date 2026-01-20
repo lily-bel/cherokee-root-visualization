@@ -43,15 +43,16 @@ export const loadData = async () => {
         complete: (results) => {
           const csvData = results.data;
           
-          // Index JSON by Definition for fast linking
-          const jsonByDef = {}; // Map: normalized definition -> json object
+          // Index JSON by Entry Number for fast linking with CSV Source_ID
+          const jsonByEntryNo = {}; // Map: entry_no -> json object
           
           // Also Index JSON by Root for the final grouping view
           const jsonByRoot = {}; // Map: root -> [objects]
 
           jsonData.forEach(item => {
-            const normDef = normalize(item.definition);
-            jsonByDef[normDef] = item;
+            if (item.entry_no) {
+              jsonByEntryNo[item.entry_no] = item;
+            }
             
             const root = item.h_grade_root || "Uncategorized";
             if (!jsonByRoot[root]) jsonByRoot[root] = [];
@@ -73,7 +74,7 @@ export const loadData = async () => {
             };
           });
 
-          resolve({ csv: searchableCsv, jsonByDef, jsonByRoot });
+          resolve({ csv: searchableCsv, jsonByEntryNo, jsonByRoot });
         }
       });
     });
