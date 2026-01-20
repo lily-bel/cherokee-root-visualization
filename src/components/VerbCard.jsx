@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, Info } from 'lucide-react';
 
-const VerbCard = ({ data, linkedCsvEntry }) => {
+const VerbCard = ({ data, linkedCsvEntry, classInfo }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const syllabary = linkedCsvEntry?.Syllabary || '---';
   const entry = linkedCsvEntry?.Entry || '';
@@ -17,6 +17,52 @@ const VerbCard = ({ data, linkedCsvEntry }) => {
     const [syl, lat, tone] = (parts || '').split('^');
     return { label, syl, lat, tone };
   });
+
+  const getMatchedEnding = (label) => {
+    if (!classInfo) return null;
+    const l = label.toLowerCase();
+    
+    if (l.includes('habitual')) return { label: 'impf', val: classInfo.imperfective };
+    if (l.includes('past')) return { label: 'perf', val: classInfo.perfective };
+    if (l.includes('imperative')) return { label: 'impr', val: classInfo.imperative };
+    if (l.includes('infinitive')) return { label: 'inf', val: classInfo.infinitive };
+    // Default to present for "present" or "1st person" (if not habitual/past/etc)
+    if (l.includes('present') || l.includes('1st')) return { label: 'pres', val: classInfo.present };
+    return null;
+  };
+
+  const formatLabel = (label) => {
+    const l = label.toLowerCase();
+    let person = '';
+    if (l.includes('1st')) person = '1st person ';
+    else if (l.includes('2nd')) person = '2nd person ';
+    else if (l.includes('3rd')) person = '3rd person ';
+    else if (l.includes('imperative')) person = '2nd person ';
+
+    let type = '';
+    if (l.includes('habitual')) type = 'habitual';
+    else if (l.includes('past')) type = 'completive past';
+    else if (l.includes('imperative')) type = 'imperative';
+    else if (l.includes('infinitive')) type = 'infinitive';
+    else if (l.includes('present') || l.includes('1st')) type = 'present';
+    
+    let object = '';
+    if (l.includes('inanimate')) object = ' (inanimate object)';
+    else if (l.includes('animate')) object = ' (animate object)';
+
+    if (!person && !type) return label;
+    return `${person}${type}${object}`;
+  };
+
+  const renderEndingBadge = (ending) => {
+    if (!ending) return null;
+    return (
+      <span className="inline-flex items-baseline gap-1 bg-[#8c7851]/5 px-1.5 py-0.5 rounded ml-2">
+        <span className="text-[7px] uppercase opacity-40 font-bold">{ending.label}:</span>
+        <span className="text-[9px] font-mono font-bold text-[#8c7851]">-{ending.val || '∅'}</span>
+      </span>
+    );
+  };
 
   const renderWithHighlight = (text, wordIndex, isSyllabary = false) => {
     if (!text) return '';
@@ -83,18 +129,27 @@ const VerbCard = ({ data, linkedCsvEntry }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
               {/* Add the 3rd person present (main entry) as the first item */}
               <div className="text-sm">
-                <span className="text-[10px] opacity-50 block mb-0.5">3rd person present</span>
+                <div className="flex items-center">
+                  <span className="text-[10px] opacity-50 block mb-0.5">{formatLabel('3rd person present')}</span>
+                  {renderEndingBadge(getMatchedEnding('3rd person present'))}
+                </div>
                 <div className="font-cherokee text-lg text-[#5d4037] dark:text-[#b08e6e]">{syllabary}</div>
                 <div className="text-xs opacity-70 italic">{linkedCsvEntry?.Entry_Tone || entry}</div>
               </div>
               
-              {otherForms.map((form, i) => (
-                <div key={i} className="text-sm">
-                  <span className="text-[10px] opacity-50 block mb-0.5">{form.label}</span>
-                  <div className="font-cherokee text-lg text-[#5d4037] dark:text-[#b08e6e]">{form.syl}</div>
-                  <div className="text-xs opacity-70 italic">{form.tone || form.lat}</div>
-                </div>
-              ))}
+              {otherForms.map((form, i) => {
+                const matched = getMatchedEnding(form.label);
+                return (
+                  <div key={i} className="text-sm">
+                    <div className="flex items-center">
+                      <span className="text-[10px] opacity-50 block mb-0.5">{formatLabel(form.label)}</span>
+                      {renderEndingBadge(matched)}
+                    </div>
+                    <div className="font-cherokee text-lg text-[#5d4037] dark:text-[#b08e6e]">{form.syl}</div>
+                    <div className="text-xs opacity-70 italic">{form.tone || form.lat}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

@@ -5,7 +5,7 @@ import VerbCard from './components/VerbCard';
 
 function App() {
   // Data State
-  const [data, setData] = useState({ csv: [], jsonByEntryNo: {}, jsonByRoot: {}, jsonByClass: {} });
+  const [data, setData] = useState({ csv: [], jsonByEntryNo: {}, jsonByRoot: {}, jsonByClass: {}, classesExpanded: {} });
   const [loading, setLoading] = useState(true);
 
   // UI State
@@ -135,6 +135,30 @@ function App() {
   const findCsvForEntryNo = (entryNo) => {
     return data.csv.find(c => parseInt(c.Source_ID) === entryNo);
   }
+
+  const renderEndings = (className) => {
+    const info = data.classesExpanded[className];
+    if (!info) return null;
+    
+    const fields = [
+      { label: 'pres', val: info.present },
+      { label: 'impf', val: info.imperfective },
+      { label: 'perf', val: info.perfective },
+      { label: 'impr', val: info.imperative },
+      { label: 'inf', val: info.infinitive }
+    ];
+
+    return (
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
+        {fields.map(f => (
+          <div key={f.label} className="flex items-baseline gap-1">
+            <span className="text-[8px] uppercase tracking-tighter opacity-40 font-bold">{f.label}:</span>
+            <span className="text-[10px] font-mono font-bold text-[#5d4037] dark:text-[#b08e6e]">-{f.val || '∅'}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   if (loading) return (
     <div className="h-screen flex items-center justify-center bg-[#f4ece1] dark:bg-[#1a1612] text-[#433422] dark:text-[#d4c3a9] font-serif text-xl italic">
@@ -354,12 +378,15 @@ function App() {
                   onClick={() => handleSelectClass(item.className)}
                   className="p-4 border border-[#8c7851]/20 hover:border-[#8c7851] transition-colors group text-left"
                 >
-                  <div className="text-lg font-mono tracking-tighter text-[#5d4037] dark:text-[#b08e6e] group-hover:text-black dark:group-hover:text-white">
-                    {item.className}
+                  <div className="flex justify-between items-start">
+                    <div className="text-lg font-mono tracking-tighter text-[#5d4037] dark:text-[#b08e6e] group-hover:text-black dark:group-hover:text-white">
+                      {item.className}
+                    </div>
+                    <div className="text-[10px] uppercase tracking-widest font-bold opacity-30">
+                      {item.count} {item.count === 1 ? 'verb' : 'verbs'}
+                    </div>
                   </div>
-                  <div className="text-[10px] uppercase tracking-widest font-bold opacity-30 mt-2">
-                    {item.count} {item.count === 1 ? 'verb' : 'verbs'}
-                  </div>
+                  {renderEndings(item.className)}
                 </button>
               ))}
             </div>
@@ -371,7 +398,8 @@ function App() {
             <div className="mb-8 border-l-4 border-[#8c7851] pl-6 py-1">
               <span className="opacity-40 text-[9px] uppercase tracking-[0.2em] font-bold block">Verb Class</span>
               <h1 className="text-2xl font-mono tracking-tighter text-[#5d4037] dark:text-[#b08e6e]">{currentClass}</h1>
-              <p className="opacity-50 italic text-xs mt-2">{classData.length} verbs in this class</p>
+              {renderEndings(currentClass)}
+              <p className="opacity-50 italic text-xs mt-4">{classData.length} verbs in this class</p>
             </div>
 
             <div className="divide-y divide-[#8c7851]/20">
@@ -420,7 +448,12 @@ function App() {
 
             <div className="space-y-1">
               {rootData.map((verb, idx) => (
-                <VerbCard key={idx} data={verb} linkedCsvEntry={findCsvForEntryNo(verb.entry_no)} />
+                <VerbCard 
+                  key={idx} 
+                  data={verb} 
+                  linkedCsvEntry={findCsvForEntryNo(verb.entry_no)} 
+                  classInfo={data.classesExpanded[verb.class_name]}
+                />
               ))}
             </div>
           </div>

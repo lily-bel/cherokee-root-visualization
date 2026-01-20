@@ -37,17 +37,19 @@ const parseCsv = (text) => new Promise((resolve) => {
 export const loadData = async () => {
   try {
     // 1. Fetch all data in parallel
-    const [jsonRes, csvRes, sentencesRes, joinRes] = await Promise.all([
+    const [jsonRes, csvRes, sentencesRes, joinRes, classesRes] = await Promise.all([
       fetch('/data/reconstructable_verbs.json'),
       fetch('/data/dictionary.csv'),
       fetch('/data/sentences.csv'),
-      fetch('/data/join_table.csv')
+      fetch('/data/join_table.csv'),
+      fetch('/data/classses_expanded.json')
     ]);
 
     const jsonData = await jsonRes.json();
     const csvText = await csvRes.text();
     const sentencesText = await sentencesRes.text();
     const joinText = await joinRes.text();
+    const classesExpanded = await classesRes.json();
 
     // 2. Parse CSVs
     const [csvData, sentencesData, joinData] = await Promise.all([
@@ -136,7 +138,7 @@ export const loadData = async () => {
         };
       });
 
-    return { csv: searchableCsv, jsonByEntryNo, jsonByRoot, jsonByClass };
+    return { csv: searchableCsv, jsonByEntryNo, jsonByRoot, jsonByClass, classesExpanded };
 
   } catch (error) {
     console.error("Error loading data:", error);
