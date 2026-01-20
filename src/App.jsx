@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Moon, Sun, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Search, Moon, Sun, ArrowLeft, AlertCircle, PieChart, X } from 'lucide-react';
 import { loadData, normalize } from './utils/dataProcessor';
 import VerbCard from './components/VerbCard';
 
@@ -14,7 +14,8 @@ function App() {
   const [view, setView] = useState('search'); // 'search' | 'root' | 'error'
   const [currentRoot, setCurrentRoot] = useState(null);
   const [rootData, setRootData] = useState([]);
-  const [darkMode, setDarkMode] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   // Load Data
   useEffect(() => {
@@ -23,6 +24,32 @@ function App() {
       setLoading(false);
     });
   }, []);
+
+  // Calculate Statistics
+  const stats = React.useMemo(() => {
+    if (!data.csv.length) return null;
+    
+    const totalDict = data.csv.length;
+    const totalRoots = Object.keys(data.jsonByRoot).length;
+    
+    // Count matches (entries in CSV that have a corresponding analysis)
+    const matchedCount = data.csv.filter(item => data.jsonByDef[normalize(item.Definition)]).length;
+    
+    // Count unique classes
+    const classes = new Set();
+    Object.values(data.jsonByRoot).flat().forEach(v => {
+      if(v.class_name) classes.add(v.class_name);
+    });
+
+    return {
+      totalDict,
+      matchedCount,
+      percent: ((matchedCount / totalDict) * 100).toFixed(1),
+      totalRoots,
+      totalClasses: classes.size,
+      totalAnalyzed: Object.values(data.jsonByRoot).flat().length
+    };
+  }, [data]);
 
   // Dark Mode Toggle
   useEffect(() => {
@@ -53,10 +80,10 @@ function App() {
       return;
     }
 
-    const root = linkedJson.glottal_grade_root;
+    const root = linkedJson.h_grade_root || "Uncategorized";
     
     // Gather all items that share this root
-    const associatedVerbs = data.jsonByRoot[root];
+    const associatedVerbs = data.jsonByRoot[root] || [];
     
     setCurrentRoot(root);
     setRootData(associatedVerbs);
@@ -79,13 +106,66 @@ function App() {
         <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-teal-700">
           Cherokee Verb Roots
         </h1>
-        <button 
-          onClick={() => setDarkMode(!darkMode)}
-          className="p-2 rounded-full bg-white dark:bg-slate-800 shadow text-slate-800 dark:text-slate-200"
-        >
-          {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => setShowStats(true)}
+            className="p-2 rounded-full bg-white dark:bg-slate-800 shadow text-slate-800 dark:text-slate-200 hover:text-emerald-500 transition-colors"
+            title="View Statistics"
+          >
+            <PieChart size={20} />
+          </button>
+          <button 
+            onClick={() => setDarkMode(!darkMode)}
+            className="p-2 rounded-full bg-white dark:bg-slate-800 shadow text-slate-800 dark:text-slate-200"
+          >
+            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+        </div>
       </div>
+
+      {/* Stats Modal */}
+      {showStats && stats && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn" onClick={() => setShowStats(false)}>
+          <div 
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 max-w-md w-full border border-slate-100 dark:border-slate-800"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                <PieChart className="text-emerald-500" /> Database Statistics
+              </h2>
+              <button onClick={() => setShowStats(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/50">
+                <div className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-1">Coverage</div>
+                <div className="text-3xl font-black text-emerald-700 dark:text-emerald-400">{stats.percent}%</div>
+                <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
+                  {stats.matchedCount} of {stats.totalDict} dictionary entries matched
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                  <div className="text-2xl font-bold text-slate-800 dark:text-white">{stats.totalRoots}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Unique Roots</div>
+                </div>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                  <div className="text-2xl font-bold text-slate-800 dark:text-white">{stats.totalClasses}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Verb Classes</div>
+                </div>
+                <div className="col-span-2 p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+                  <div className="text-2xl font-bold text-slate-800 dark:text-white">{stats.totalAnalyzed}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider font-semibold">Total Analyzed Forms</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="max-w-4xl mx-auto">
@@ -159,7 +239,7 @@ function App() {
             </button>
 
             <div className="mb-8">
-              <span className="text-slate-400 text-sm uppercase tracking-widest font-bold">Glottal Grade Root</span>
+              <span className="text-slate-400 text-sm uppercase tracking-widest font-bold">H-Grade Root</span>
               <h1 className="text-4xl md:text-6xl font-black text-slate-800 dark:text-white font-mono mt-1">
                 {currentRoot || "NULL"}
               </h1>

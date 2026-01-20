@@ -53,13 +53,15 @@ export const loadData = async () => {
             const normDef = normalize(item.definition);
             jsonByDef[normDef] = item;
             
-            const root = item.glottal_grade_root || "Uncategorized";
+            const root = item.h_grade_root || "Uncategorized";
             if (!jsonByRoot[root]) jsonByRoot[root] = [];
             jsonByRoot[root].push(item);
           });
 
           // Process CSV for Search Optimization
-          const searchableCsv = csvData.map(row => {
+          const searchableCsv = csvData
+            .filter(row => row.Entry && row.Part_of_Speech && row.Part_of_Speech.toLowerCase().includes('verb'))
+            .map(row => {
             return {
               ...row,
               searchMeta: [
@@ -69,7 +71,7 @@ export const loadData = async () => {
                 ...parseOtherForms(row.Other_Forms).map(f => normalize(f))
               ].join(' ') // Create a giant search string for simple .includes()
             };
-          }).filter(row => row.Entry); // Remove empty rows
+          });
 
           resolve({ csv: searchableCsv, jsonByDef, jsonByRoot });
         }
