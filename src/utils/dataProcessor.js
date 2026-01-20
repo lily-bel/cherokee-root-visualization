@@ -27,57 +27,117 @@ const parseOtherForms = (rawString) => {
   return forms;
 };
 
+const parseCsv = (text) => new Promise((resolve) => {
+  Papa.parse(text, {
+    header: true,
+    complete: (results) => resolve(results.data)
+  });
+});
+
 export const loadData = async () => {
   try {
-    // 1. Fetch JSON
-    const jsonRes = await fetch('/data/reconstructable_verbs.json');
+    // 1. Fetch all data in parallel
+    const [jsonRes, csvRes, sentencesRes, joinRes] = await Promise.all([
+      fetch('/data/reconstructable_verbs.json'),
+      fetch('/data/dictionary.csv'),
+      fetch('/data/sentences.csv'),
+      fetch('/data/join_table.csv')
+    ]);
+
     const jsonData = await jsonRes.json();
-
-    // 2. Fetch CSV
-    const csvRes = await fetch('/data/dictionary.csv');
     const csvText = await csvRes.text();
-    
-    return new Promise((resolve) => {
-      Papa.parse(csvText, {
-        header: true,
-        complete: (results) => {
-          const csvData = results.data;
-          
-          // Index JSON by Entry Number for fast linking with CSV Source_ID
-          const jsonByEntryNo = {}; // Map: entry_no -> json object
-          
-          // Also Index JSON by Root for the final grouping view
-          const jsonByRoot = {}; // Map: root -> [objects]
+    const sentencesText = await sentencesRes.text();
+    const joinText = await joinRes.text();
 
-          jsonData.forEach(item => {
-            if (item.entry_no) {
-              jsonByEntryNo[item.entry_no] = item;
-            }
-            
-            const root = item.h_grade_root || "Uncategorized";
-            if (!jsonByRoot[root]) jsonByRoot[root] = [];
-            jsonByRoot[root].push(item);
-          });
+    // 2. Parse CSVs
+    const [csvData, sentencesData, joinData] = await Promise.all([
+      parseCsv(csvText),
+      parseCsv(sentencesText),
+      parseCsv(joinText)
+    ]);
 
-          // Process CSV for Search Optimization
-          const searchableCsv = csvData
-            .filter(row => row.Entry && row.Part_of_Speech && row.Part_of_Speech.toLowerCase().includes('verb'))
-            .map(row => {
-            return {
-              ...row,
-              searchMeta: [
-                normalize(row.Entry),
-                normalize(row.Syllabary),
-                normalize(row.Definition),
-                ...parseOtherForms(row.Other_Forms).map(f => normalize(f))
-              ].join(' ') // Create a giant search string for simple .includes()
-            };
-          });
-
-          resolve({ csv: searchableCsv, jsonByEntryNo, jsonByRoot });
-        }
-      });
+    // 3. Process Sentences
+    // Map: Sentence_ID -> Sentence Object
+    const sentencesById = {};
+    sentencesData.forEach(s => {
+      if (s.ID) {
+        sentencesById[s.ID.trim()] = s;
+      }
     });
+
+    // Map: Entry_ID (Dictionary Index) -> Array of Sentence Objects
+    const sentencesByEntryId = {};
+    const seenSentences = {}; // Map: Entry_ID -> Set(Sentence_ID)
+
+    joinData.forEach(link => {
+      const entryId = link.Entry_ID?.trim();
+      const sentenceId = link.Sentence_ID?.trim();
+      const wordIndex = link.Word_Index?.trim();
+
+      if (entryId && sentenceId) {
+        if (!sentencesByEntryId[entryId]) {
+          sentencesByEntryId[entryId] = [];
+          seenSentences[entryId] = new Set();
+        }
+        
+        const sentence = sentencesById[sentenceId];
+        // Deduplicate sentences per entry, but allow same sentence if Word_Index is different
+        const dedupeKey = `${sentenceId}-${wordIndex}`;
+        if (sentence && !seenSentences[entryId].has(dedupeKey)) {
+          sentencesByEntryId[entryId].push({
+            ...sentence,
+            wordIndex: wordIndex
+          });
+          seenSentences[entryId].add(dedupeKey);
+        }
+      }
+    });
+
+    // 4. Process Dictionary Data
+    // Index JSON by Entry Number for fast linking with CSV Source_ID
+    const jsonByEntryNo = {}; // Map: entry_no -> json object
+    
+    // Index JSON by Root for the final grouping view
+    const jsonByRoot = {}; // Map: root -> [objects]
+    
+    // Index JSON by Class
+    const jsonByClass = {}; // Map: class -> [objects]
+
+    jsonData.forEach(item => {
+      if (item.entry_no) {
+        jsonByEntryNo[item.entry_no] = item;
+      }
+      
+      const root = item.h_grade_root || "Uncategorized";
+      if (!jsonByRoot[root]) jsonByRoot[root] = [];
+      jsonByRoot[root].push(item);
+
+      const className = item.class_name || "Unclassified";
+      if (!jsonByClass[className]) jsonByClass[className] = [];
+      jsonByClass[className].push(item);
+    });
+
+    // Process CSV for Search Optimization and attach Sentences
+    const searchableCsv = csvData
+      .filter(row => row.Entry && row.Part_of_Speech && row.Part_of_Speech.toLowerCase().includes('verb'))
+      .map(row => {
+        // Attach linked sentences
+        const linkedSentences = sentencesByEntryId[row.Index] || [];
+
+        return {
+          ...row,
+          sentences: linkedSentences,
+          searchMeta: [
+            normalize(row.Entry),
+            normalize(row.Syllabary),
+            normalize(row.Definition),
+            ...parseOtherForms(row.Other_Forms).map(f => normalize(f))
+          ].join(' ') // Create a giant search string for simple .includes()
+        };
+      });
+
+    return { csv: searchableCsv, jsonByEntryNo, jsonByRoot, jsonByClass };
+
   } catch (error) {
     console.error("Error loading data:", error);
     return null;

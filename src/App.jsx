@@ -1,21 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Moon, Sun, ArrowLeft, PieChart } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, Moon, Sun, ArrowLeft, PieChart, List, SortAsc, SortDesc, Hash } from 'lucide-react';
 import { loadData, normalize } from './utils/dataProcessor';
 import VerbCard from './components/VerbCard';
 
 function App() {
   // Data State
-  const [data, setData] = useState({ csv: [], jsonByEntryNo: {}, jsonByRoot: {} });
+  const [data, setData] = useState({ csv: [], jsonByEntryNo: {}, jsonByRoot: {}, jsonByClass: {} });
   const [loading, setLoading] = useState(true);
 
   // UI State
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [view, setView] = useState('search'); // 'search' | 'root' | 'error'
+  const [view, setView] = useState('search'); // 'search' | 'root' | 'index' | 'classes' | 'class-detail' | 'error'
   const [currentRoot, setCurrentRoot] = useState({ h: null, g: null });
+  const [currentClass, setCurrentClass] = useState(null);
   const [rootData, setRootData] = useState([]);
+  const [classData, setClassData] = useState([]);
   const [darkMode, setDarkMode] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key: 'count', direction: 'desc' });
+  const [classSortConfig, setClassSortConfig] = useState({ key: 'count', direction: 'desc' });
 
   // Load Data
   useEffect(() => {
@@ -26,7 +30,7 @@ function App() {
   }, []);
 
   // Calculate Statistics
-  const stats = React.useMemo(() => {
+  const stats = useMemo(() => {
     if (!data.csv.length) return null;
     const totalDict = data.csv.length;
     const matchedCount = data.csv.filter(item => data.jsonByEntryNo[parseInt(item.Source_ID)]).length;
@@ -40,6 +44,47 @@ function App() {
       totalClasses: classes.size
     };
   }, [data]);
+
+  // Root Index Data
+  const rootIndex = useMemo(() => {
+    return Object.entries(data.jsonByRoot).map(([root, formations]) => {
+      const displayDefinition = formations[0]?.definition || "No definition";
+      return {
+        root,
+        count: formations.length,
+        definition: displayDefinition,
+        glottal: formations[0]?.glottal_grade_root || "---"
+      };
+    }).sort((a, b) => {
+      let comparison = 0;
+      if (sortConfig.key === 'root') {
+        comparison = a.root.localeCompare(b.root);
+      } else if (sortConfig.key === 'count') {
+        comparison = a.count - b.count;
+      } else if (sortConfig.key === 'definition') {
+        comparison = a.definition.localeCompare(b.definition);
+      }
+      return sortConfig.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [data.jsonByRoot, sortConfig]);
+
+  // Classes Index Data
+  const classesIndex = useMemo(() => {
+    return Object.entries(data.jsonByClass || {}).map(([className, verbs]) => {
+      return {
+        className,
+        count: verbs.length
+      };
+    }).sort((a, b) => {
+      let comparison = 0;
+      if (classSortConfig.key === 'className') {
+        comparison = a.className.localeCompare(b.className);
+      } else if (classSortConfig.key === 'count') {
+        comparison = a.count - b.count;
+      }
+      return classSortConfig.direction === 'asc' ? comparison : -comparison;
+    });
+  }, [data.jsonByClass, classSortConfig]);
 
   // Dark Mode Toggle
   useEffect(() => {
@@ -60,18 +105,31 @@ function App() {
     setSearchResults(results);
   }, [searchTerm, data.csv]);
 
-  // Handle Clicking a CSV Result
+  // Handle Clicking a CSV Result or Root Index Item
+  const handleSelectRoot = (rootName) => {
+    const formations = data.jsonByRoot[rootName] || [];
+    if (formations.length === 0) { setView('error'); return; }
+    
+    setCurrentRoot({ 
+      h: rootName, 
+      g: formations[0]?.glottal_grade_root || "---" 
+    });
+    setRootData(formations);
+    setView('root');
+  };
+
+  const handleSelectClass = (className) => {
+    const verbs = data.jsonByClass[className] || [];
+    setCurrentClass(className);
+    setClassData(verbs);
+    setView('class-detail');
+  };
+
   const handleSelectResult = (csvItem) => {
     const entryNo = parseInt(csvItem.Source_ID);
     const linkedJson = data.jsonByEntryNo[entryNo];
     if (!linkedJson) { setView('error'); return; }
-    
-    const hRoot = linkedJson.h_grade_root || "Uncategorized";
-    const gRoot = linkedJson.glottal_grade_root || "---";
-    
-    setCurrentRoot({ h: hRoot, g: gRoot });
-    setRootData(data.jsonByRoot[hRoot] || []);
-    setView('root');
+    handleSelectRoot(linkedJson.h_grade_root || "Uncategorized");
   };
 
   const findCsvForEntryNo = (entryNo) => {
@@ -114,10 +172,41 @@ function App() {
       )}
 
       {/* Top Bar */}
-      <div className="max-w-3xl mx-auto flex justify-between items-center mb-12 pb-2 border-b border-[#8c7851]">
-        <h1 className="text-2xl font-bold font-cherokee">
-          Cherokee Verb Roots
-        </h1>
+      <div className="max-w-3xl mx-auto flex justify-between items-center mb-8 pb-2 border-b border-[#8c7851]">
+        {view === 'root' || view === 'class-detail' ? (
+          <button 
+            onClick={() => setView(view === 'root' ? 'index' : 'classes')} 
+            className="flex items-center opacity-70 hover:opacity-100 uppercase text-xs tracking-[0.2em] font-bold py-1"
+          >
+            <ArrowLeft size={16} className="mr-2" /> Back
+          </button>
+        ) : (
+          <div className="flex items-center gap-6">
+            <h1 className="text-lg font-bold font-cherokee opacity-80">
+              Cherokee Verb Roots
+            </h1>
+            <nav className="flex gap-4">
+              <button 
+                onClick={() => setView('search')} 
+                className={`text-[10px] uppercase tracking-widest font-bold pb-1 transition-all ${view === 'search' ? 'border-b-2 border-[#8c7851] opacity-100' : 'opacity-40'}`}
+              >
+                Search
+              </button>
+              <button 
+                onClick={() => setView('index')} 
+                className={`text-[10px] uppercase tracking-widest font-bold pb-1 transition-all ${view === 'index' ? 'border-b-2 border-[#8c7851] opacity-100' : 'opacity-40'}`}
+              >
+                Roots
+              </button>
+              <button 
+                onClick={() => setView('classes')} 
+                className={`text-[10px] uppercase tracking-widest font-bold pb-1 transition-all ${view === 'classes' ? 'border-b-2 border-[#8c7851] opacity-100' : 'opacity-40'}`}
+              >
+                Classes
+              </button>
+            </nav>
+          </div>
+        )}
         <div className="flex gap-4 items-center">
           <button onClick={() => setShowStats(true)} className="hover:opacity-60"><PieChart size={20} /></button>
           <button onClick={() => setDarkMode(!darkMode)} className="hover:opacity-60">{darkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
@@ -193,27 +282,143 @@ function App() {
           </div>
         )}
 
-        {view === 'root' && (
-          <div>
-            <button onClick={() => setView('search')} className="mb-12 flex items-center opacity-50 hover:opacity-100 uppercase text-xs tracking-widest font-bold">
-              <ArrowLeft size={16} className="mr-2" /> Back
-            </button>
-
-            <div className="mb-12 border-l-4 border-[#8c7851] pl-6 py-2">
-              <div className="flex flex-col md:flex-row md:items-baseline md:gap-8">
-                <div>
-                  <span className="opacity-40 text-[10px] uppercase tracking-[0.2em] font-bold">H-Grade Root</span>
-                  <h1 className="text-5xl font-bold mt-1 font-cherokee">{currentRoot.h}</h1>
-                </div>
-                <div>
-                  <span className="opacity-40 text-[10px] uppercase tracking-[0.2em] font-bold">Glottal Root</span>
-                  <h1 className="text-4xl font-bold mt-1 font-cherokee opacity-80 italic">{currentRoot.g}</h1>
-                </div>
-              </div>
-              <p className="opacity-50 italic mt-6 text-lg">{rootData.length} related formations</p>
+        {view === 'index' && (
+          <div className="space-y-6">
+            <div className="flex gap-4 items-center border-b border-[#8c7851]/20 pb-4">
+              <span className="text-[10px] uppercase tracking-widest font-bold opacity-40">Sort By:</span>
+              <button 
+                onClick={() => setSortConfig({ key: 'root', direction: sortConfig.key === 'root' && sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
+                className={`flex items-center gap-1 text-xs font-bold ${sortConfig.key === 'root' ? 'opacity-100' : 'opacity-40'}`}
+              >
+                Root {sortConfig.key === 'root' && (sortConfig.direction === 'asc' ? <SortDesc size={14} /> : <SortAsc size={14} />)}
+              </button>
+              <button 
+                onClick={() => setSortConfig({ key: 'definition', direction: sortConfig.key === 'definition' && sortConfig.direction === 'asc' ? 'desc' : 'asc' })}
+                className={`flex items-center gap-1 text-xs font-bold ${sortConfig.key === 'definition' ? 'opacity-100' : 'opacity-40'}`}
+              >
+                English {sortConfig.key === 'definition' && (sortConfig.direction === 'asc' ? <SortDesc size={14} /> : <SortAsc size={14} />)}
+              </button>
+              <button 
+                onClick={() => setSortConfig({ key: 'count', direction: sortConfig.key === 'count' && sortConfig.direction === 'desc' ? 'asc' : 'desc' })}
+                className={`flex items-center gap-1 text-xs font-bold ${sortConfig.key === 'count' ? 'opacity-100' : 'opacity-40'}`}
+              >
+                Forms {sortConfig.key === 'count' && (sortConfig.direction === 'asc' ? <SortAsc size={14} /> : <SortDesc size={14} />)}
+              </button>
             </div>
 
-            <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-2">
+              {rootIndex.map((item, idx) => (
+                <button 
+                  key={idx}
+                  onClick={() => handleSelectRoot(item.root)}
+                  className="flex items-center justify-between p-3 border-b border-[#8c7851]/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group text-left"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-lg font-bold font-cherokee text-[#5d4037] dark:text-[#b08e6e] group-hover:text-black dark:group-hover:text-white transition-colors">
+                      {item.root}
+                    </span>
+                    <span className="text-xs italic opacity-60">{item.definition}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] uppercase tracking-widest font-bold opacity-30">
+                      {item.count} {item.count === 1 ? 'form' : 'forms'}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {view === 'classes' && (
+          <div className="space-y-6">
+            <div className="flex gap-4 items-center border-b border-[#8c7851]/20 pb-4">
+              <span className="text-[10px] uppercase tracking-widest font-bold opacity-40">Sort By:</span>
+              <button 
+                onClick={() => setClassSortConfig({ key: 'className', direction: classSortConfig.key === 'className' && classSortConfig.direction === 'asc' ? 'desc' : 'asc' })}
+                className={`flex items-center gap-1 text-xs font-bold ${classSortConfig.key === 'className' ? 'opacity-100' : 'opacity-40'}`}
+              >
+                Class {classSortConfig.key === 'className' && (classSortConfig.direction === 'asc' ? <SortDesc size={14} /> : <SortAsc size={14} />)}
+              </button>
+              <button 
+                onClick={() => setClassSortConfig({ key: 'count', direction: classSortConfig.key === 'count' && classSortConfig.direction === 'desc' ? 'asc' : 'desc' })}
+                className={`flex items-center gap-1 text-xs font-bold ${classSortConfig.key === 'count' ? 'opacity-100' : 'opacity-40'}`}
+              >
+                Frequency {classSortConfig.key === 'count' && (classSortConfig.direction === 'asc' ? <SortAsc size={14} /> : <SortDesc size={14} />)}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {classesIndex.map((item, idx) => (
+                <button 
+                  key={idx}
+                  onClick={() => handleSelectClass(item.className)}
+                  className="p-4 border border-[#8c7851]/20 hover:border-[#8c7851] transition-colors group text-left"
+                >
+                  <div className="text-lg font-mono tracking-tighter text-[#5d4037] dark:text-[#b08e6e] group-hover:text-black dark:group-hover:text-white">
+                    {item.className}
+                  </div>
+                  <div className="text-[10px] uppercase tracking-widest font-bold opacity-30 mt-2">
+                    {item.count} {item.count === 1 ? 'verb' : 'verbs'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {view === 'class-detail' && (
+          <div className="space-y-6">
+            <div className="mb-8 border-l-4 border-[#8c7851] pl-6 py-1">
+              <span className="opacity-40 text-[9px] uppercase tracking-[0.2em] font-bold block">Verb Class</span>
+              <h1 className="text-2xl font-mono tracking-tighter text-[#5d4037] dark:text-[#b08e6e]">{currentClass}</h1>
+              <p className="opacity-50 italic text-xs mt-2">{classData.length} verbs in this class</p>
+            </div>
+
+            <div className="divide-y divide-[#8c7851]/20">
+              {classData.map((verb, idx) => {
+                const csv = findCsvForEntryNo(verb.entry_no);
+                return (
+                  <button 
+                    key={idx}
+                    onClick={() => handleSelectRoot(verb.h_grade_root)}
+                    className="w-full py-4 text-left group hover:bg-black/5 dark:hover:bg-white/5 px-2 transition-colors flex justify-between items-baseline"
+                  >
+                    <div>
+                      <div className="font-bold text-[#5d4037] dark:text-[#b08e6e] group-hover:text-black dark:group-hover:text-white">
+                        {verb.definition}
+                      </div>
+                      <div className="text-xs italic opacity-40 mt-1">
+                        {csv?.Syllabary || '---'} ({csv?.Entry || '---'})
+                      </div>
+                    </div>
+                    <div className="text-xs font-cherokee opacity-60">
+                      Root: {verb.h_grade_root}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {view === 'root' && (
+          <div>
+            <div className="mb-8 border-l-4 border-[#8c7851] pl-6 py-1">
+              <div className="flex flex-wrap gap-x-12 gap-y-4">
+                <div className="flex flex-wrap gap-x-8 gap-y-2">
+                  <div>
+                    <span className="opacity-40 text-[9px] uppercase tracking-[0.2em] font-bold block">H-Grade Root</span>
+                    <h1 className="text-2xl font-bold font-cherokee text-[#5d4037] dark:text-[#b08e6e]">{currentRoot.h}</h1>
+                  </div>
+                  <div>
+                    <span className="opacity-40 text-[9px] uppercase tracking-[0.2em] font-bold block">Glottal Root</span>
+                    <h1 className="text-2xl font-bold font-cherokee text-[#5d4037] dark:text-[#b08e6e]">{currentRoot.g}</h1>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
               {rootData.map((verb, idx) => (
                 <VerbCard key={idx} data={verb} linkedCsvEntry={findCsvForEntryNo(verb.entry_no)} />
               ))}
