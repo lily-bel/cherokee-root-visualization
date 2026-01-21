@@ -22,8 +22,8 @@ const VerbCard = ({ data, linkedCsvEntry, classInfo }) => {
     if (!classInfo) return null;
     const l = label.toLowerCase();
     
-    if (l.includes('habitual')) return { label: 'impf', val: classInfo.imperfective };
-    if (l.includes('past')) return { label: 'perf', val: classInfo.perfective };
+    if (l.includes('habitual')) return { label: 'hab', val: classInfo.imperfective };
+    if (l.includes('past')) return { label: 'past', val: classInfo.perfective };
     if (l.includes('imperative')) return { label: 'impr', val: classInfo.imperative };
     if (l.includes('infinitive')) return { label: 'inf', val: classInfo.infinitive };
     // Default to present for "present" or "1st person" (if not habitual/past/etc)
@@ -58,6 +58,27 @@ const VerbCard = ({ data, linkedCsvEntry, classInfo }) => {
     }
     return acc;
   }, {});
+
+  const typePriority = {
+    'present': 1,
+    'habitual': 2,
+    'past': 3,
+    'imperative': 4,
+    'infinitive': 5
+  };
+
+  const sortedOtherForms = [...otherForms].sort((a, b) => {
+    const infoA = getLabelInfo(a.label);
+    const infoB = getLabelInfo(b.label);
+    
+    if (typePriority[infoA.type] !== typePriority[infoB.type]) {
+      return typePriority[infoA.type] - typePriority[infoB.type];
+    }
+    
+    // Within same type, sort by person (1st, 2nd, 3rd)
+    const personPriority = { '1st': 1, '2nd': 2, '3rd': 3, '': 4 };
+    return (personPriority[infoA.person] || 99) - (personPriority[infoB.person] || 99);
+  });
 
   const formatLabel = (label) => {
     const l = label.toLowerCase();
@@ -171,7 +192,7 @@ const VerbCard = ({ data, linkedCsvEntry, classInfo }) => {
                 <div className="text-xs opacity-70 italic">{linkedCsvEntry?.Entry_Tone || entry}</div>
               </div>
               
-              {otherForms.map((form, i) => {
+              {sortedOtherForms.map((form, i) => {
                 const matched = getMatchedEnding(form.label);
                 return (
                   <div key={i} className="text-sm">

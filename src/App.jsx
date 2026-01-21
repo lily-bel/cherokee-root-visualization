@@ -299,19 +299,31 @@ function App() {
 
       
 
-      const fields = [
+            const fields = [
 
-        { label: 'pres', val: info.present },
+      
 
-        { label: 'impf', val: info.imperfective },
+              { label: 'pres', val: info.present },
 
-        { label: 'perf', val: info.perfective },
+      
 
-        { label: 'impr', val: info.imperative },
+              { label: 'hab', val: info.imperfective },
 
-        { label: 'inf', val: info.infinitive }
+      
 
-      ];
+              { label: 'past', val: info.perfective },
+
+      
+
+              { label: 'impr', val: info.imperative },
+
+      
+
+              { label: 'inf', val: info.infinitive }
+
+      
+
+            ];
 
   
 
@@ -889,21 +901,21 @@ function App() {
 
                   <thead>
 
-                    <tr className="border-b border-[#8c7851]/20">
+                                        <tr className="border-b border-[#8c7851]/20">
 
-                      <th className="py-2 px-1 sm:px-2 font-bold uppercase tracking-wider opacity-60 min-w-[100px] sm:min-w-[140px]">Variation</th>
+                                          <th className="py-2 px-1 sm:px-2 font-bold uppercase tracking-wider opacity-60 min-w-[100px] sm:min-w-[140px]">Variation</th>
 
-                      <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Pres</th>
+                                          <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Pres</th>
 
-                      <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Impf</th>
+                                          <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Hab</th>
 
-                      <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Perf</th>
+                                          <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Past</th>
 
-                      <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Impr</th>
+                                          <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Impr</th>
 
-                      <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Inf</th>
+                                          <th className="py-2 px-1 sm:px-2 font-bold opacity-60">Inf</th>
 
-                    </tr>
+                                        </tr>
 
                   </thead>
 
