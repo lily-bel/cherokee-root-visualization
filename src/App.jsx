@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Moon, Sun, ArrowLeft, PieChart, List, SortAsc, SortDesc, Hash } from 'lucide-react';
-import { loadData, normalize } from './utils/dataProcessor';
+import { loadData, normalize, scoreSearchResult } from './utils/dataProcessor';
 import VerbCard from './components/VerbCard';
 
 function App() {
@@ -94,15 +94,25 @@ function App() {
 
   // Handle Search
   useEffect(() => {
-    if (!searchTerm || searchTerm.length < 2) {
+    if (!searchTerm || searchTerm.trim().length < 1) {
       setSearchResults([]);
       return;
     }
-    const normalizedQuery = normalize(searchTerm);
-    const results = data.csv.filter(item => 
-      item.searchMeta.includes(normalizedQuery)
-    ).slice(0, 50);
-    setSearchResults(results);
+    
+    const scoredResults = data.csv
+      .map(item => ({
+        item,
+        score: scoreSearchResult(item, searchTerm)
+      }))
+      .filter(res => {
+        // Hide "unknown" roots from results but keep the "null" ones
+        return res.score > 0 && res.item.hRoot !== "unknown";
+      })
+      .sort((a, b) => b.score - a.score || a.item.Entry.localeCompare(b.item.Entry))
+      .slice(0, 50)
+      .map(res => res.item);
+
+    setSearchResults(scoredResults);
   }, [searchTerm, data.csv]);
 
   // Handle Clicking a CSV Result or Root Index Item
@@ -112,7 +122,7 @@ function App() {
     
     setCurrentRoot({ 
       h: rootName, 
-      g: formations[0]?.glottal_grade_root || "---" 
+      g: formations[0]?.glottal_grade_root === "" ? "null" : (formations[0]?.glottal_grade_root || "unknown")
     });
     setRootData(formations);
     setView('root');
@@ -126,10 +136,11 @@ function App() {
   };
 
   const handleSelectResult = (csvItem) => {
-    const entryNo = parseInt(csvItem.Source_ID);
+    const sourceId = csvItem.Source_ID || "";
+    const entryNo = sourceId.split('.')[0];
     const linkedJson = data.jsonByEntryNo[entryNo];
     if (!linkedJson) { setView('error'); return; }
-    handleSelectRoot(linkedJson.h_grade_root || "Uncategorized");
+    handleSelectRoot(linkedJson.h_grade_root === "" ? "null" : (linkedJson.h_grade_root || "unknown"));
   };
 
   const findCsvForEntryNo = (entryNo) => {
@@ -153,7 +164,7 @@ function App() {
         {fields.map(f => (
           <div key={f.label} className="flex items-baseline gap-1">
             <span className="text-[8px] uppercase tracking-tighter opacity-40 font-bold">{f.label}:</span>
-            <span className="text-[10px] font-mono font-bold text-[#5d4037] dark:text-[#b08e6e]">-{f.val || '∅'}</span>
+            <span className="text-[10px] font-mono font-bold text-[#5d4037] dark:text-[#b08e6e]">-{f.val || 'null'}</span>
           </div>
         ))}
       </div>
@@ -190,13 +201,13 @@ function App() {
                    </div>
                 </div>
              </div>
-             <button onClick={() => setShowStats(false)} className="mt-8 w-full py-3 border border-[#433422] dark:border-[#d4c3a9] font-bold italic hover:bg-black/5 transition-colors">Close Folio</button>
+             <button onClick={() => setShowStats(false)} className="mt-8 w-full py-3 border border-[#433422] dark:border-[#d4c3a9] font-bold italic hover:bg-black/5 transition-colors">Close</button>
           </div>
         </div>
       )}
 
       {/* Top Bar */}
-      <div className="max-w-3xl mx-auto flex justify-between items-center mb-8 pb-2 border-b border-[#8c7851]">
+      <div className="max-w-3xl mx-auto flex justify-between items-center mb-8 pb-2 border-b border-[#8c7851] gap-4">
         {view === 'root' || view === 'class-detail' ? (
           <button 
             onClick={() => setView(view === 'root' ? 'index' : 'classes')} 
@@ -205,35 +216,35 @@ function App() {
             <ArrowLeft size={16} className="mr-2" /> Back
           </button>
         ) : (
-          <div className="flex items-center gap-6">
-            <h1 className="text-lg font-bold font-cherokee opacity-80">
-              Cherokee Verb Roots
+          <div className="flex items-center gap-3 sm:gap-6 overflow-hidden">
+            <h1 className="text-sm sm:text-lg font-bold font-cherokee opacity-80 whitespace-nowrap">
+              Verb Roots
             </h1>
-            <nav className="flex gap-4">
+            <nav className="flex gap-2 sm:gap-4 overflow-x-auto no-scrollbar">
               <button 
                 onClick={() => setView('search')} 
-                className={`text-[10px] uppercase tracking-widest font-bold pb-1 transition-all ${view === 'search' ? 'border-b-2 border-[#8c7851] opacity-100' : 'opacity-40'}`}
+                className={`text-[9px] sm:text-[10px] uppercase tracking-widest font-bold pb-1 transition-all whitespace-nowrap ${view === 'search' ? 'border-b-2 border-[#8c7851] opacity-100' : 'opacity-40'}`}
               >
                 Search
               </button>
               <button 
                 onClick={() => setView('index')} 
-                className={`text-[10px] uppercase tracking-widest font-bold pb-1 transition-all ${view === 'index' ? 'border-b-2 border-[#8c7851] opacity-100' : 'opacity-40'}`}
+                className={`text-[9px] sm:text-[10px] uppercase tracking-widest font-bold pb-1 transition-all whitespace-nowrap ${view === 'index' ? 'border-b-2 border-[#8c7851] opacity-100' : 'opacity-40'}`}
               >
                 Roots
               </button>
               <button 
                 onClick={() => setView('classes')} 
-                className={`text-[10px] uppercase tracking-widest font-bold pb-1 transition-all ${view === 'classes' ? 'border-b-2 border-[#8c7851] opacity-100' : 'opacity-40'}`}
+                className={`text-[9px] sm:text-[10px] uppercase tracking-widest font-bold pb-1 transition-all whitespace-nowrap ${view === 'classes' ? 'border-b-2 border-[#8c7851] opacity-100' : 'opacity-40'}`}
               >
                 Classes
               </button>
             </nav>
           </div>
         )}
-        <div className="flex gap-4 items-center">
-          <button onClick={() => setShowStats(true)} className="hover:opacity-60"><PieChart size={20} /></button>
-          <button onClick={() => setDarkMode(!darkMode)} className="hover:opacity-60">{darkMode ? <Sun size={20} /> : <Moon size={20} />}</button>
+        <div className="flex gap-3 sm:gap-4 items-center flex-shrink-0">
+          <button onClick={() => setShowStats(true)} className="hover:opacity-60"><PieChart size={18} /></button>
+          <button onClick={() => setDarkMode(!darkMode)} className="hover:opacity-60">{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
         </div>
       </div>
 
@@ -258,7 +269,8 @@ function App() {
                 const groups = searchResults.reduce((acc, result) => {
                   const entryNo = parseInt(result.Source_ID);
                   const linkedJson = data.jsonByEntryNo[entryNo];
-                  const root = linkedJson?.h_grade_root || "unknown";
+                  // result.hRoot already contains "null" string if it's the null root
+                  const root = result.hRoot;
                   if (!acc[root]) acc[root] = { root, definitions: [], results: [] };
                   acc[root].definitions.push(result.Definition);
                   acc[root].results.push(result);
@@ -266,8 +278,8 @@ function App() {
                 }, {});
 
                 return Object.values(groups).map((group, idx) => {
-                  const root = group.root !== "unknown" ? group.root : null;
-                  const formCount = root ? (data.jsonByRoot[root]?.length || 0) : 0;
+                  const root = group.root;
+                  const formCount = data.jsonByRoot[root]?.length || 0;
                   const displayDefinitions = [...new Set(group.definitions)];
 
                   return (
@@ -279,11 +291,7 @@ function App() {
                       <div className="flex items-baseline justify-between">
                         <div className="flex flex-col">
                           <div className="flex items-baseline gap-3">
-                            {root ? (
-                              <span className="text-xl font-bold font-cherokee">{root}</span>
-                            ) : (
-                              <span className="text-sm opacity-40 italic">Root unknown</span>
-                            )}
+                            <span className={`text-xl font-bold ${root === 'null' ? 'italic opacity-60' : 'font-cherokee'}`}>{root}</span>
                             <span className="text-xs uppercase tracking-widest opacity-40 font-mono">
                               {group.results[0].Entry}
                             </span>
@@ -338,7 +346,7 @@ function App() {
                   className="flex items-center justify-between p-3 border-b border-[#8c7851]/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors group text-left"
                 >
                   <div className="flex flex-col">
-                    <span className="text-lg font-bold font-cherokee text-[#5d4037] dark:text-[#b08e6e] group-hover:text-black dark:group-hover:text-white transition-colors">
+                    <span className={`text-lg font-bold ${item.root === 'null' ? 'italic opacity-60' : 'font-cherokee'} text-[#5d4037] dark:text-[#b08e6e] group-hover:text-black dark:group-hover:text-white transition-colors`}>
                       {item.root}
                     </span>
                     <span className="text-xs italic opacity-60">{item.definition}</span>
@@ -436,11 +444,11 @@ function App() {
                 <div className="flex flex-wrap gap-x-8 gap-y-2">
                   <div>
                     <span className="opacity-40 text-[9px] uppercase tracking-[0.2em] font-bold block">H-Grade Root</span>
-                    <h1 className="text-2xl font-bold font-cherokee text-[#5d4037] dark:text-[#b08e6e]">{currentRoot.h}</h1>
+                    <h1 className={`text-2xl font-bold ${currentRoot.h === 'null' ? 'italic opacity-60' : 'font-cherokee'} text-[#5d4037] dark:text-[#b08e6e]`}>{currentRoot.h}</h1>
                   </div>
                   <div>
                     <span className="opacity-40 text-[9px] uppercase tracking-[0.2em] font-bold block">Glottal Root</span>
-                    <h1 className="text-2xl font-bold font-cherokee text-[#5d4037] dark:text-[#b08e6e]">{currentRoot.g}</h1>
+                    <h1 className={`text-2xl font-bold ${currentRoot.g === 'null' ? 'italic opacity-60' : 'font-cherokee'} text-[#5d4037] dark:text-[#b08e6e]`}>{currentRoot.g}</h1>
                   </div>
                 </div>
               </div>

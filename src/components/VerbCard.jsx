@@ -10,11 +10,11 @@ const VerbCard = ({ data, linkedCsvEntry, classInfo }) => {
   const className = data.class_name;
   const sentences = linkedCsvEntry?.sentences || [];
   
-  // Parse Other Forms: "Label:Syllabary^Latin^Tone|..."
+  // Parse Other Forms: "Label:Latin^Syllabary^Tone|..."
   const otherFormsRaw = linkedCsvEntry?.Other_Forms || '';
   const otherForms = otherFormsRaw.split('|').filter(f => f).map(form => {
     const [label, parts] = form.split(':');
-    const [syl, lat, tone] = (parts || '').split('^');
+    const [lat, syl, tone] = (parts || '').split('^');
     return { label, syl, lat, tone };
   });
 
@@ -31,8 +31,39 @@ const VerbCard = ({ data, linkedCsvEntry, classInfo }) => {
     return null;
   };
 
+  const getLabelInfo = (label) => {
+    const l = label.toLowerCase();
+    let person = '';
+    if (l.includes('1st')) person = '1st';
+    else if (l.includes('2nd')) person = '2nd';
+    else if (l.includes('3rd')) person = '3rd';
+    else if (l.includes('imperative')) person = '2nd';
+
+    let type = '';
+    if (l.includes('habitual')) type = 'habitual';
+    else if (l.includes('past')) type = 'past';
+    else if (l.includes('imperative')) type = 'imperative';
+    else if (l.includes('infinitive')) type = 'infinitive';
+    else if (l.includes('present') || l.includes('1st')) type = 'present';
+    
+    return { person, type };
+  };
+
+  // Count occurrences of (person, type) pairs to determine if animate/inanimate distinction is needed
+  const labelCounts = ['3rd person present', ...otherForms.map(f => f.label)].reduce((acc, label) => {
+    const { person, type } = getLabelInfo(label);
+    if (person || type) {
+      const key = `${person}-${type}`;
+      acc[key] = (acc[key] || 0) + 1;
+    }
+    return acc;
+  }, {});
+
   const formatLabel = (label) => {
     const l = label.toLowerCase();
+    const { person: pId, type: tId } = getLabelInfo(label);
+    const count = labelCounts[`${pId}-${tId}`] || 0;
+
     let person = '';
     if (l.includes('1st')) person = '1st person ';
     else if (l.includes('2nd')) person = '2nd person ';
@@ -47,8 +78,11 @@ const VerbCard = ({ data, linkedCsvEntry, classInfo }) => {
     else if (l.includes('present') || l.includes('1st')) type = 'present';
     
     let object = '';
-    if (l.includes('inanimate')) object = ' (inanimate object)';
-    else if (l.includes('animate')) object = ' (animate object)';
+    // Only show animate/inanimate if there are multiple forms for this person/tense
+    if (count > 1) {
+      if (l.includes('inanimate')) object = ' (inanimate object)';
+      else if (l.includes('animate')) object = ' (animate object)';
+    }
 
     if (!person && !type) return label;
     return `${person}${type}${object}`;

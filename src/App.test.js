@@ -16,6 +16,6 @@ test('renders title after loading', async () => {
   render(<App />);
   
   // Wait for the loading state to disappear and title to appear
-  const titleElement = await screen.findByText(/Cherokee Verb Roots/i);
+  const titleElement = await screen.findByText(/Verb Roots/i);
   expect(titleElement).toBeInTheDocument();
 });

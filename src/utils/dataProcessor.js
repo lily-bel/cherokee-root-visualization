@@ -9,8 +9,34 @@ export const normalize = (text) => {
     .trim();
 };
 
+export const scoreSearchResult = (item, query) => {
+  const normalizedQuery = normalize(query);
+  const queryNoHyphen = normalizedQuery.replace(/-/g, '');
+  if (!normalizedQuery) return 0;
+
+  let score = 0;
+  const hRootClean = normalize(item.hRoot || "").replace(/-/g, '');
+  const gRootClean = normalize(item.gRoot || "").replace(/-/g, '');
+  
+  // Priority 1: Exact root match (sans hyphens)
+  if (queryNoHyphen && (hRootClean === queryNoHyphen || gRootClean === queryNoHyphen)) {
+    score += 100;
+  }
+  
+  // Priority 2: Exact entry/syllabary match
+  if (normalize(item.Entry) === normalizedQuery || normalize(item.Syllabary) === normalizedQuery) {
+    score += 50;
+  }
+  
+  // Basic match
+  if (item.searchMeta.includes(normalizedQuery)) {
+    score += 1;
+  }
+  
+  return score;
+};
+
 // Parses the "Other Forms" column (pipe and caret separated)
-// Example: ...:gadadega^ᎦᏓᏕᎦ^gạdạdéga|...
 const parseOtherForms = (rawString) => {
   if (!rawString) return [];
   const entries = rawString.split('|');
@@ -20,7 +46,6 @@ const parseOtherForms = (rawString) => {
     const parts = entry.split(':');
     if (parts.length > 1) {
       const subParts = parts[1].split('^');
-      // Add Latin and Syllabary parts to searchable array
       subParts.forEach(sp => forms.push(sp.trim()));
     }
   });
@@ -36,7 +61,6 @@ const parseCsv = (text) => new Promise((resolve) => {
 
 export const loadData = async () => {
   try {
-    // 1. Fetch all data in parallel
     const [jsonRes, csvRes, sentencesRes, joinRes, classesRes] = await Promise.all([
       fetch('/data/reconstructable_verbs.json'),
       fetch('/data/dictionary.csv'),
@@ -51,15 +75,13 @@ export const loadData = async () => {
     const joinText = await joinRes.text();
     const classesExpanded = await classesRes.json();
 
-    // 2. Parse CSVs
     const [csvData, sentencesData, joinData] = await Promise.all([
       parseCsv(csvText),
       parseCsv(sentencesText),
       parseCsv(joinText)
     ]);
 
-    // 3. Process Sentences
-    // Map: Sentence_ID -> Sentence Object
+    // Process Sentences
     const sentencesById = {};
     sentencesData.forEach(s => {
       if (s.ID) {
@@ -67,9 +89,8 @@ export const loadData = async () => {
       }
     });
 
-    // Map: Entry_ID (Dictionary Index) -> Array of Sentence Objects
     const sentencesByEntryId = {};
-    const seenSentences = {}; // Map: Entry_ID -> Set(Sentence_ID)
+    const seenSentences = {};
 
     joinData.forEach(link => {
       const entryId = link.Entry_ID?.trim();
@@ -83,7 +104,6 @@ export const loadData = async () => {
         }
         
         const sentence = sentencesById[sentenceId];
-        // Deduplicate sentences per entry, but allow same sentence if Word_Index is different
         const dedupeKey = `${sentenceId}-${wordIndex}`;
         if (sentence && !seenSentences[entryId].has(dedupeKey)) {
           sentencesByEntryId[entryId].push({
@@ -95,22 +115,23 @@ export const loadData = async () => {
       }
     });
 
-    // 4. Process Dictionary Data
-    // Index JSON by Entry Number for fast linking with CSV Source_ID
-    const jsonByEntryNo = {}; // Map: entry_no -> json object
-    
-    // Index JSON by Root for the final grouping view
-    const jsonByRoot = {}; // Map: root -> [objects]
-    
-    // Index JSON by Class
-    const jsonByClass = {}; // Map: class -> [objects]
+    // Process Dictionary Data
+    const jsonByEntryNo = {};
+    const jsonByRoot = {};
+    const jsonByClass = {};
 
     jsonData.forEach(item => {
-      if (item.entry_no) {
-        jsonByEntryNo[item.entry_no] = item;
+      if (item.entry_no !== undefined && item.entry_no !== null) {
+        jsonByEntryNo[item.entry_no.toString()] = item;
       }
       
-      const root = item.h_grade_root || "Uncategorized";
+      let root = "unknown";
+      if (item.h_grade_root === "") {
+        root = "null";
+      } else if (item.h_grade_root) {
+        root = item.h_grade_root;
+      }
+
       if (!jsonByRoot[root]) jsonByRoot[root] = [];
       jsonByRoot[root].push(item);
 
@@ -119,22 +140,33 @@ export const loadData = async () => {
       jsonByClass[className].push(item);
     });
 
-    // Process CSV for Search Optimization and attach Sentences
     const searchableCsv = csvData
       .filter(row => row.Entry && row.Part_of_Speech && row.Part_of_Speech.toLowerCase().includes('verb'))
       .map(row => {
-        // Attach linked sentences
+        const sourceId = row.Source_ID || "";
+        const entryNo = sourceId.split('.')[0];
+        const jsonMatch = jsonByEntryNo[entryNo];
+        
+        const hRoot = jsonMatch ? (jsonMatch.h_grade_root === "" ? "null" : (jsonMatch.h_grade_root || "unknown")) : "unknown";
+        const gRoot = jsonMatch ? (jsonMatch.glottal_grade_root === "" ? "null" : (jsonMatch.glottal_grade_root || "unknown")) : "unknown";
+        
         const linkedSentences = sentencesByEntryId[row.Index] || [];
 
         return {
           ...row,
+          hRoot,
+          gRoot,
           sentences: linkedSentences,
           searchMeta: [
             normalize(row.Entry),
             normalize(row.Syllabary),
             normalize(row.Definition),
+            normalize(hRoot),
+            normalize(hRoot.replace(/-/g, '')),
+            normalize(gRoot),
+            normalize(gRoot.replace(/-/g, '')),
             ...parseOtherForms(row.Other_Forms).map(f => normalize(f))
-          ].join(' ') // Create a giant search string for simple .includes()
+          ].join(' ')
         };
       });
 
